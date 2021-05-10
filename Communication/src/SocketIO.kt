@@ -18,11 +18,10 @@ class SocketIO(private val adapter: SignalAdapter, inputStream: InputStream, out
     }
 
     inner class AsyncInput(input: InputStream) : AsyncStream(input){
-        private val stream = ObjectInputStream(input)
-
         init {
             thread {
                 try {
+                    val stream = ObjectInputStream(input)
                     val signal = Signal.fromBytesStream(stream)
                     adapter.inputSignal(signal, this@SocketIO)
                 } catch (ex: InterruptedException){
@@ -33,11 +32,10 @@ class SocketIO(private val adapter: SignalAdapter, inputStream: InputStream, out
     }
 
     inner class AsyncOutput(output: OutputStream) : AsyncStream(output){
-        private val stream = ObjectOutputStream(output)
-
         init{
             thread {
                 try {
+                    val stream = ObjectOutputStream(output)
                     signals.take().toBytesStream(stream)
                 } catch (ex: InterruptedException){
                     ex.printStackTrace()

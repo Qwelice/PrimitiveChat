@@ -1,17 +1,14 @@
 import signals.*
-import java.net.InetAddress
+import signals.exceptions.ServerIsFullException
+import signals.exceptions.SuchUserExistException
 import java.net.ServerSocket
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
 class Server(private val maxConnections: Int = 10, private val port: Int = 5803) : SignalAdapter{
-    companion object{
-        var count = 0
-    }
     private var stop = false
-    private val sSocket = ServerSocket(port)
-    private val connected = ConcurrentHashMap<Int, SocketIO>()
-    private val registered = ConcurrentHashMap<Int, String>()
+    private val sSocket = ServerSocket(this.port)
+    private val connected = ConcurrentHashMap<SocketIO, String>()
 
     init {
         thread {
@@ -24,15 +21,13 @@ class Server(private val maxConnections: Int = 10, private val port: Int = 5803)
                     val sio = SocketIO(this, cSocket.getInputStream(), cSocket.getOutputStream())
                     println("New connection is accepted")
                     if(connected.size >= maxConnections){
-                        sio.sendData(SignalError("Server is full!\nConnection is closed"))
+                        sio.sendData(SignalError(ServerIsFullException()))
                         sio.stop()
                         cSocket.close()
                         println("New connection has been closed. Reason: server is full")
                         continue
                     }
-                    connected[count] = sio
-                    sio.sendData(SignalIdentify(count))
-                    count++
+                    connected[sio] = ""
                 } catch (ex: InterruptedException){
                     ex.printStackTrace()
                 }
@@ -42,19 +37,51 @@ class Server(private val maxConnections: Int = 10, private val port: Int = 5803)
 
     override fun inputSignal(signal: Signal, comm: SocketIO) {
         when(signal.getType()){
-            "Login" -> {
-                login(signal as SignalLogin, comm)
+            "Connect" -> {
+                signalConnect(signal as SignalConnect, comm)
+            }
+            "Disconnect" -> {
+                signalDisconnect(comm)
+            }
+            "SendMessage" -> {
+                signalSendMessage(signal as SignalNewMessage)
             }
         }
     }
 
-    private fun login(signal: SignalLogin, sio: SocketIO){
-        if(signal.id !in connected.keys){
-            sio.sendData(SignalError("Not identified access"))
-            sio.stop()
+    private fun signalConnect(signal: SignalConnect, sio: SocketIO){
+        if (!connected.values.contains(signal.username)){
+            connected[sio] = signal.username
+            sio.sendData(SignalSuccess("Welcome, ${signal.username}!"))
+            broadcastSignal(SignalNewMessage("Пользователь ${signal.username} вошел в чат!"))
+            broadcastSignal(SignalUserList(connected.values.toList()))
+        }else{
+            sio.sendData(SignalError(SuchUserExistException()))
         }
-        registered[signal.id] = signal.username
-        sio.sendData(SignalSuccess("Login is success"))
-        println("User: ${signal.username} is registered")
+    }
+
+    private fun signalDisconnect(sio: SocketIO){
+        val username = connected[sio]
+        sio.sendData(SignalNewMessage("Вы отключились от чата! До свидания!"))
+        removeSocketIO(sio)
+        broadcastSignal(SignalNewMessage("Пользователь $username покинул чат"))
+        broadcastSignal(SignalUserList(connected.values.toList()))
+    }
+
+    private fun signalSendMessage(signal: SignalNewMessage){
+        broadcastSignal(signal)
+    }
+
+    private fun broadcastSignal(signal: Signal){
+        for(s in connected.keys){
+            s.sendData(signal)
+        }
+    }
+
+    private fun removeSocketIO(sio: SocketIO){
+        if(connected.keys.contains(sio)){
+            sio.stop()
+            connected.remove(sio)
+        }
     }
 }

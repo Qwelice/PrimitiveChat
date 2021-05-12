@@ -1,5 +1,3 @@
 package signals
 
-class SignalEmpty : Signal() {
-
-}
+class SignalEmpty : Signal()

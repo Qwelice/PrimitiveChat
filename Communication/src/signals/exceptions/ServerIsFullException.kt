@@ -1,8 +1,8 @@
-package signals
+package signals.exceptions
 
 import java.lang.Exception
 
-class InvalidSignalException() : Exception() {
+class ServerIsFullException() : Exception() {
     private var msg: String? = null
     private var cs: Throwable? = null
     override val message: String?
